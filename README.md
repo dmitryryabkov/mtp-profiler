@@ -168,19 +168,20 @@ Compares each MTP setting's average throughput against the baseline (no MTP), wi
 ============================================================
   MTP Profiler - Recommendation
 ============================================================
-Recommended MTP setting: 3
+Recommended MTP setting: 2
 
 Settings compared:
   Setting 0: throughput=+0.0%, long-context=degraded, stability=variable
-  Setting 1: throughput=+4.8%, long-context=degraded, stability=variable
-  Setting 2: throughput=+14.0%, long-context=degraded, stability=variable
-  Setting 3: throughput=+19.6%, long-context=degraded, stability=variable <-- recommended
+  Setting 1: throughput=+9.7%, long-context=degraded, stability=variable
+  Setting 2: throughput=+33.6%, long-context=degraded, stability=variable <-- recommended
+  Setting 3: throughput=+25.9%, long-context=degraded, stability=variable
+  Setting 4: throughput=+35.2%, long-context=degraded, stability=variable
 
-Throughput vs baseline: +19.6%
+Throughput vs baseline: +33.6%
 Long-context efficiency: degraded
 Stability: variable
-Average generation throughput: 19.37 t/s
-Average draft acceptance rate: 95.7%
+Average generation throughput: 19.97 t/s
+Average draft acceptance rate: 93.8%
 ============================================================
 ```
 
