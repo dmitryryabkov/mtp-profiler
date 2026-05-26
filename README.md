@@ -1,8 +1,21 @@
 # MTP Profiler
 
-Profile speculative decoding / Multi-Token Prediction (MTP) performance in llama.cpp inference workloads on Apple Silicon systems.
+Real-world speculative decoding profiler for llama.cpp workloads on Apple Silicon.
 
-Analyze real-world inference logs to determine the optimal MTP draft-token setting for your specific hardware and workload.
+MTP Profiler analyzes real llama.cpp inference workloads to help identify optimal speculative decoding (Multi-Token Prediction / MTP) settings for your hardware and usage patterns. Unlike synthetic microbenchmarks, MTP Profiler focuses on long-running real-world sessions such as coding agents, chat workloads, and long-context inference. It profiles throughput degradation, draft-token acceptance rates, and speculative decoding efficiency using telemetry extracted directly from llama.cpp logs.
+
+## Why This Exists
+
+Speculative decoding performance depends heavily on:
+
+- hardware characteristics,
+- memory bandwidth,
+- context length,
+- model architecture,
+- workload entropy,
+- and draft-token acceptance rates.
+
+Synthetic benchmarks often fail to capture real-world behavior, especially during long-running sessions with growing context windows. MTP Profiler helps quantify speculative decoding efficiency using telemetry from actual inference workloads, making it easier to identify the optimal draft-token settings for a specific machine and usage pattern.
 
 ## What is MTP?
 
