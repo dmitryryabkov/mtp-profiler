@@ -132,7 +132,10 @@ def _recommend_from_analysis(
     # Compute comparable-context uplift for each setting
     comparable_upticks: dict[int, float | None] = {}
     for comp in comparisons:
-        if comp.setting != 0 and baseline_comp:
+        if comp.setting == baseline_comp.setting:
+            # Baseline has 0.0 uplift and is comparable
+            comparable_upticks[comp.setting] = 0.0
+        elif baseline_comp:
             comparable_upticks[comp.setting] = _compute_comparable_context_uplift(
                 baseline_comp, comp
             )
@@ -346,11 +349,15 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
     """
     # Throughput score (0-100) based on comparable-context uplift
     # Baseline gets 50 (neutral), positive uplift increases, negative decreases
+    # Non-comparable settings get neutral score (cannot fairly compare)
     uplift = rec.avg_throughput_uptick
-    if uplift is not None:
+    if uplift is not None and rec.comparable:
         # Scale: +50% uplift = 100, 0% = 50, -50% = 0
         throughput_score = 50 + (uplift / 50) * 50
         throughput_score = max(0, min(100, throughput_score))
+    elif rec.comparable is False:
+        # Non-comparable: neutral score, penalty applied later
+        throughput_score = 50
     else:
         # Fallback to raw TPS ratio if no uplift available
         if all_comparisons is None:

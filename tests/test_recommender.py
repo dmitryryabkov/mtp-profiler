@@ -59,6 +59,20 @@ class TestRecommend:
             ),
             mtp_setting_comparisons=[
                 MTPSettingComparison(
+                    setting=0,
+                    count=5,
+                    avg_tps=20.0,
+                    avg_acceptance_rate=0.0,
+                    avg_context_length=5000.0,
+                    min_tps=18.0,
+                    max_tps=22.0,
+                    tps_std=1.5,
+                    tps_cv=0.075,
+                    min_context=100,
+                    max_context=4000,
+                    raw_points=[(100.0, 20.0), (1000.0, 20.5), (2000.0, 19.5), (3000.0, 20.0), (4000.0, 20.2)],
+                ),
+                MTPSettingComparison(
                     setting=1,
                     count=5,
                     avg_tps=25.0,
@@ -68,6 +82,9 @@ class TestRecommend:
                     max_tps=30.0,
                     tps_std=3.0,
                     tps_cv=0.12,
+                    min_context=100,
+                    max_context=4000,
+                    raw_points=[(100.0, 25.0), (1000.0, 26.0), (2000.0, 24.5), (3000.0, 25.5), (4000.0, 25.0)],
                 ),
                 MTPSettingComparison(
                     setting=2,
@@ -79,14 +96,65 @@ class TestRecommend:
                     max_tps=35.0,
                     tps_std=3.0,
                     tps_cv=0.1,
+                    min_context=100,
+                    max_context=4000,
+                    raw_points=[(100.0, 30.0), (1000.0, 31.0), (2000.0, 29.5), (3000.0, 30.5), (4000.0, 30.0)],
                 ),
             ],
         )
 
         result = recommend(None, analysis)
 
-        # Setting 2 should win due to higher throughput
+        # Setting 2 should win due to higher comparable-context throughput
         assert result.recommended_setting == 2
+
+    def test_non_comparable_setting_cannot_win(self):
+        """Test that a setting with no comparable overlap gets penalized and cannot win."""
+        analysis = AnalysisOutput(
+            run_id="test",
+            metrics=AnalysisMetrics(
+                avg_generation_tps=28.0,
+                avg_acceptance_rate=0.85,
+            ),
+            mtp_setting_comparisons=[
+                MTPSettingComparison(
+                    setting=0,
+                    count=5,
+                    avg_tps=20.0,
+                    avg_acceptance_rate=0.0,
+                    avg_context_length=5000.0,
+                    min_tps=18.0,
+                    max_tps=22.0,
+                    tps_std=1.5,
+                    tps_cv=0.075,
+                    min_context=100,
+                    max_context=1000,
+                    raw_points=[(100.0, 20.0), (500.0, 20.5), (1000.0, 20.2)],
+                ),
+                MTPSettingComparison(
+                    setting=1,
+                    count=5,
+                    avg_tps=40.0,
+                    avg_acceptance_rate=0.95,
+                    avg_context_length=5000.0,
+                    min_tps=35.0,
+                    max_tps=45.0,
+                    tps_std=3.0,
+                    tps_cv=0.075,
+                    min_context=5000,
+                    max_context=10000,
+                    raw_points=[(5000.0, 40.0), (7500.0, 40.5), (10000.0, 40.2)],
+                ),
+            ],
+        )
+
+        result = recommend(None, analysis)
+
+        # Setting 1 has no overlapping context range with baseline (100-1000 vs 5000-10000)
+        # It should be marked non-comparable and cannot win despite 2x throughput
+        setting1_rec = next(r for r in result.all_recommendations if r.mtp_setting == 1)
+        assert setting1_rec.comparable is False
+        assert result.recommended_setting == 0
 
     def test_recommend_empty_comparisons(self):
         """Test recommendation with no data."""
