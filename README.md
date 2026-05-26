@@ -4,6 +4,69 @@ Profile speculative decoding / Multi-Token Prediction (MTP) performance in llama
 
 Analyze real-world inference logs to determine the optimal MTP draft-token setting for your specific hardware and workload.
 
+## What is MTP?
+
+Multi-Token Prediction (MTP) is a speculative decoding technique used in llama.cpp to accelerate inference. Instead of generating one token at a time, MTP uses a smaller "draft" model to predict multiple tokens in parallel, then verifies them against the full model. The key configuration parameters are:
+
+- **`--mtp-n-max`** — maximum number of draft tokens to generate per step (e.g. 1, 2, 3, 4)
+- **`--mtp-n-min`** — minimum number of draft tokens (usually 0)
+- **`--mtp-p-min`** — minimum acceptance probability threshold (e.g. 0.70)
+
+Higher `n_max` values can increase throughput but may reduce acceptance rates or become unstable at long context lengths. The optimal setting depends on your specific model, hardware, and workload.
+
+## How to run llama.cpp with MTP
+
+Start the llama.cpp server with your desired MTP configuration:
+
+```bash
+llama-server \
+  --model /path/to/your/model.gguf \
+  --mtp-n-max 2 \
+  --mtp-n-min 0 \
+  --mtp-p-min 0.70 \
+  --threads 8 \
+  --host 0.0.0.0 \
+  --port 8080
+```
+
+## How to collect logs
+
+Run the server with output piped through `tee` to capture logs to a file:
+
+```bash
+llama-server ... 2>&1 | tee -a llama.log
+```
+
+Send inference requests (via API, web UI, or benchmark tools) while the server is running. The profiler parses the server log to extract timing data, MTP metrics, and system information.
+
+## How to get a comprehensive analysis
+
+llama.cpp only supports one MTP configuration at a time. To get a comprehensive comparison and recommendation:
+
+1. **Run the server multiple times** with different `--mtp-n-max` values (e.g. 1, 2, 3, 4), sending the same workload each time
+2. **Append each run's logs** to the same file using `tee -a`
+3. **Point the profiler at the combined log file** — it automatically detects server restarts and merges runs by `n_max` setting
+
+Example workflow:
+
+```bash
+# Run 1: n_max=1
+llama-server --mtp-n-max 1 ... 2>&1 | tee -a llama.log
+
+# Run 2: n_max=2 (append to same file)
+llama-server --mtp-n-max 2 ... 2>&1 | tee -a llama.log
+
+# Run 3: n_max=3 (append to same file)
+llama-server --mtp-n-max 3 ... 2>&1 | tee -a llama.log
+
+# Analyze all runs together
+mtp-profiler profile llama.log -d output/
+```
+
+## About this project
+
+This repository and its code were generated entirely by AI agents. The charts, analysis, and recommendations shown in this README were produced from logs collected while the AI agent was actively implementing this very codebase — making it a self-referential profiling exercise. The real-world test data comes from `Qwen3.6-35B-A3B-UD-Q4_K_XL` on an Apple M3 Pro (28753 MB RAM, 8/11 threads).
+
 ## Features
 
 - **Passive log analysis** - No synthetic benchmarks, just analyze real llama.cpp server logs
