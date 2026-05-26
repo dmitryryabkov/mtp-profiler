@@ -1,0 +1,40 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test/coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Output directories
+mtp-output*/
+parsed.json
+analysis.json
+recommendation.json
+charts/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
