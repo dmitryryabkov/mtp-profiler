@@ -154,7 +154,7 @@ def _smooth_lowess(series: pd.Series, frac: float) -> pd.Series:
         Smoothed values as numpy array.
     """
     try:
-        from statsmodels.nonparametric.smoothing_lowess import lowess
+        from statsmodels.nonparametric.api import lowess
         clean = series.dropna().sort_index()
         if len(clean) < 3:
             return series
