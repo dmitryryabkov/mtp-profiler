@@ -150,6 +150,7 @@ class Recommendation(BaseModel):
     long_context_efficiency: str = ""  # good, moderate, poor
     stability: str = ""  # stable, moderate, unstable
     memory_overhead_estimate_mb: Optional[float] = None
+    comparable: bool = True  # whether throughput uplift is from comparable-context analysis
     reasoning: list[str] = Field(default_factory=list)
 
 

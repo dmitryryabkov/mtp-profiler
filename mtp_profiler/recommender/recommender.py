@@ -175,17 +175,22 @@ def _evaluate_setting(
 
     # Comparable-context throughput uplift vs baseline
     throughput_uptick = None
+    is_comparable = True
     if baseline_tps and baseline_tps > 0:
         # Overall uplift (all contexts)
         overall_uplift = (comp.avg_tps - baseline_tps) / baseline_tps * 100
 
-        # Use comparable-context uplift when available, fallback to overall
+        # Use comparable-context uplift when available
         if comparable_uptick is not None:
             throughput_uptick = round(comparable_uptick, 1)
             reasoning.append(f"Comparable-context uplift: {comparable_uptick:+.1f}%")
             display_uplift = comparable_uptick
         else:
+            # No overlapping context range with baseline — cannot fairly compare
+            is_comparable = False
             throughput_uptick = round(overall_uplift, 1)
+            reasoning.append(f"No overlapping context range with baseline (range: {comp.min_context}-{comp.max_context})")
+            reasoning.append(f"Throughput vs baseline (non-comparable): {overall_uplift:+.1f}%")
             display_uplift = overall_uplift
 
         if display_uplift > 5:
@@ -219,6 +224,7 @@ def _evaluate_setting(
         long_context_efficiency=efficiency,
         stability=stability,
         memory_overhead_estimate_mb=memory_mb,
+        comparable=is_comparable,
         reasoning=reasoning,
     )
 
@@ -369,7 +375,11 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
     efficiency_score = efficiency_map.get(rec.long_context_efficiency, 50)
 
     # Acceptance rate score (0-100)
-    acceptance_score = min(100, comp.avg_acceptance_rate * 100)
+    # Baseline (setting 0) has no acceptance rate — give neutral score
+    if comp.setting == 0:
+        acceptance_score = 50
+    else:
+        acceptance_score = min(100, comp.avg_acceptance_rate * 100)
 
     # Weighted composite
     composite = (
@@ -378,6 +388,10 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
         + efficiency_score * 0.20
         + acceptance_score * 0.15
     )
+
+    # Non-comparable penalty: settings without overlapping context range with baseline
+    if not rec.comparable:
+        composite -= 20
 
     # Diminishing returns penalty: deduct points for n_max > 2
     if comp.setting > 2:
