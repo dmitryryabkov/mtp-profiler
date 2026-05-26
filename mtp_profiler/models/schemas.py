@@ -129,6 +129,8 @@ class MTPSettingComparison(BaseModel):
     # Context range for comparable-context uplift calculation
     min_context: int = 0
     max_context: int = 0
+    # Raw (context_length, tps) points for comparable-context calculations
+    raw_points: list[tuple[float, float]] = Field(default_factory=list)
 
 
 class AnalysisOutput(BaseModel):

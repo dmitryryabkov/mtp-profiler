@@ -234,11 +234,19 @@ def _compute_metrics(df: pd.DataFrame) -> AnalysisMetrics:
         # Linear regression for degradation rate (tps per 1000 tokens)
         try:
             from scipy import stats as scipy_stats
-            from scipy.linalg import LinAlgError
 
             slope, _, _, _, _ = scipy_stats.linregress(n_tokens_arr, tps_arr)
             metrics.context_degradation_rate = float(slope * 1000)  # per 1000 tokens
-        except (ImportError, LinAlgError, ValueError):
+        except ImportError:
+            # scipy not available, fallback to two-point estimate
+            sorted_idx = np.argsort(n_tokens_arr)
+            if len(sorted_idx) >= 2:
+                first = tps_arr[sorted_idx[0]]
+                last = tps_arr[sorted_idx[-1]]
+                ctx_diff = (n_tokens_arr[sorted_idx[-1]] - n_tokens_arr[sorted_idx[0]]) / 1000
+                if ctx_diff > 0:
+                    metrics.context_degradation_rate = float((last - first) / ctx_diff)
+        except ValueError:
             # Fallback: simple two-point estimate
             sorted_idx = np.argsort(n_tokens_arr)
             if len(sorted_idx) >= 2:
@@ -314,6 +322,10 @@ def _single_group_comparison(group: pd.DataFrame, setting: int) -> MTPSettingCom
     acc = group["acceptance_rate"].dropna()
     ctx = group["n_tokens"].dropna()
 
+    # Collect raw (context_length, tps) points where both are valid
+    valid = group[["n_tokens", "gen_tps"]].dropna()
+    raw_points = [(float(row["n_tokens"]), float(row["gen_tps"])) for _, row in valid.iterrows()]
+
     return MTPSettingComparison(
         setting=setting,
         count=len(gen_tps),
@@ -326,6 +338,7 @@ def _single_group_comparison(group: pd.DataFrame, setting: int) -> MTPSettingCom
         tps_cv=float(gen_tps.std() / gen_tps.mean()) if len(gen_tps) > 1 and gen_tps.mean() > 0 else 0.0,
         min_context=int(ctx.min()) if len(ctx) > 0 else 0,
         max_context=int(ctx.max()) if len(ctx) > 0 else 0,
+        raw_points=raw_points,
     )
 
 

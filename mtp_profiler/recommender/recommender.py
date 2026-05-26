@@ -27,6 +27,46 @@ from mtp_profiler.models.schemas import (
 logger = logging.getLogger(__name__)
 
 
+def _compute_comparable_context_uplift(
+    baseline_comp: MTPSettingComparison,
+    candidate_comp: MTPSettingComparison,
+) -> float | None:
+    """Compute throughput uplift within the overlapping context range.
+
+    Filters both baseline and candidate raw points to only those within
+    the overlapping context range, then computes average TPS for each
+    and returns the percentage uplift.
+
+    Returns:
+        Uplift percentage, or None if no overlap or insufficient data.
+    """
+    if not baseline_comp.raw_points or not candidate_comp.raw_points:
+        return None
+
+    overlap_min = max(baseline_comp.min_context, candidate_comp.min_context)
+    overlap_max = min(baseline_comp.max_context, candidate_comp.max_context)
+
+    if overlap_min >= overlap_max:
+        return None
+
+    # Filter points to overlapping range
+    baseline_overlap = [tps for ctx, tps in baseline_comp.raw_points
+                        if overlap_min <= ctx <= overlap_max]
+    candidate_overlap = [tps for ctx, tps in candidate_comp.raw_points
+                         if overlap_min <= ctx <= overlap_max]
+
+    if len(baseline_overlap) < 2 or len(candidate_overlap) < 2:
+        return None
+
+    baseline_avg = sum(baseline_overlap) / len(baseline_overlap)
+    candidate_avg = sum(candidate_overlap) / len(candidate_overlap)
+
+    if baseline_avg == 0:
+        return None
+
+    return ((candidate_avg - baseline_avg) / baseline_avg) * 100
+
+
 def recommend(
     profile: ProfileOutput,
     analysis: AnalysisOutput | None = None,
@@ -89,11 +129,22 @@ def _recommend_from_analysis(
         else (0, 0)
     )
 
+    # Compute comparable-context uplift for each setting
+    comparable_upticks: dict[int, float | None] = {}
+    for comp in comparisons:
+        if comp.setting != 0 and baseline_comp:
+            comparable_upticks[comp.setting] = _compute_comparable_context_uplift(
+                baseline_comp, comp
+            )
+        else:
+            comparable_upticks[comp.setting] = None
+
     # Evaluate each setting
     all_recommendations: list[Recommendation] = []
 
     for comp in comparisons:
-        rec = _evaluate_setting(comp, metrics, baseline_tps, comparisons, baseline_context_range)
+        rec = _evaluate_setting(comp, metrics, baseline_tps, comparisons,
+                                baseline_context_range, comparable_upticks.get(comp.setting))
         all_recommendations.append(rec)
 
     # Select the best setting
@@ -117,39 +168,39 @@ def _evaluate_setting(
     baseline_tps: float | None,
     all_comparisons: list[MTPSettingComparison],
     baseline_context_range: tuple[int, int] = (0, 0),
+    comparable_uptick: float | None = None,
 ) -> Recommendation:
     """Evaluate a single MTP setting and produce a recommendation."""
     reasoning: list[str] = []
 
     # Comparable-context throughput uplift vs baseline
     throughput_uptick = None
-    comparable_uptick = None
     if baseline_tps and baseline_tps > 0:
         # Overall uplift (all contexts)
         overall_uplift = (comp.avg_tps - baseline_tps) / baseline_tps * 100
-        throughput_uptick = round(overall_uplift, 1)
 
-        # Comparable-context uplift (only within overlapping range)
-        if comp.min_context > 0 and comp.max_context > 0:
-            overlap_min = max(baseline_context_range[0], comp.min_context)
-            overlap_max = min(baseline_context_range[1], comp.max_context)
-            if overlap_min < overlap_max:
-                comparable_uptick = round(overall_uplift, 1)  # Placeholder; actual comparable uplift needs raw data
-                reasoning.append(f"Comparable-context uplift: {comparable_uptick:+.1f}%")
-
-        if overall_uplift > 5:
-            reasoning.append(f"+{overall_uplift:.1f}% throughput vs baseline")
-        elif overall_uplift > -5:
-            reasoning.append(f"~{overall_uplift:.1f}% throughput vs baseline (near parity)")
+        # Use comparable-context uplift when available, fallback to overall
+        if comparable_uptick is not None:
+            throughput_uptick = round(comparable_uptick, 1)
+            reasoning.append(f"Comparable-context uplift: {comparable_uptick:+.1f}%")
+            display_uplift = comparable_uptick
         else:
-            reasoning.append(f"{overall_uplift:.1f}% throughput vs baseline (degradation)")
+            throughput_uptick = round(overall_uplift, 1)
+            display_uplift = overall_uplift
+
+        if display_uplift > 5:
+            reasoning.append(f"+{display_uplift:.1f}% throughput vs baseline")
+        elif display_uplift > -5:
+            reasoning.append(f"~{display_uplift:.1f}% throughput vs baseline (near parity)")
+        else:
+            reasoning.append(f"{display_uplift:.1f}% throughput vs baseline (degradation)")
 
     # Diminishing returns penalty for high draft counts
     if comp.setting > 2:
         penalty_points = (comp.setting - 2) * 1.5
         reasoning.append(f"Diminishing returns penalty: -{penalty_points:.1f} pts (n_max={comp.setting})")
 
-    # Long-context efficiency
+    # Long-context efficiency (per-setting fallback)
     efficiency = _assess_long_context_efficiency(comp, metrics)
     reasoning.append(f"Long-context efficiency: {efficiency}")
 
@@ -176,7 +227,35 @@ def _assess_long_context_efficiency(
     comp: MTPSettingComparison,
     metrics: AnalysisMetrics,
 ) -> str:
-    """Assess how well a setting performs in long-context scenarios."""
+    """Assess how well a setting performs in long-context scenarios.
+
+    Uses per-setting raw points to compute short vs long context TPS ratio.
+    Falls back to global metrics if raw points are unavailable.
+    """
+    # Try per-setting computation from raw points
+    if comp.raw_points and len(comp.raw_points) >= 4:
+        # Sort by context length
+        sorted_points = sorted(comp.raw_points, key=lambda p: p[0])
+        n = len(sorted_points)
+        q1_idx = n // 4
+        q3_idx = 3 * n // 4
+
+        short_tps = [tps for _, tps in sorted_points[:q1_idx]]
+        long_tps = [tps for _, tps in sorted_points[q3_idx:]]
+
+        if short_tps and long_tps:
+            short_avg = sum(short_tps) / len(short_tps)
+            long_avg = sum(long_tps) / len(long_tps)
+            if short_avg > 0:
+                ratio = long_avg / short_avg
+                if ratio >= 0.9:
+                    return "good"
+                elif ratio >= 0.7:
+                    return "moderate"
+                else:
+                    return "degraded"
+
+    # Fallback: use global metrics if available
     if metrics.short_context_avg_tps and metrics.long_context_avg_tps:
         ratio = metrics.long_context_avg_tps / metrics.short_context_avg_tps
         if ratio >= 0.9:
@@ -253,18 +332,25 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
     """Compute a composite score for a single setting.
 
     Score components (normalized to 0-100):
-    - Throughput: 40% weight
+    - Throughput: 40% weight (based on comparable-context uplift vs baseline)
     - Stability: 25% weight
     - Long-context efficiency: 20% weight
     - Acceptance rate: 15% weight
     - Diminishing returns penalty for high draft counts
     """
-    # Throughput score (0-100)
-    # Higher TPS = better, normalized relative to max
-    if all_comparisons is None:
-        all_comparisons = [comp]
-    max_tps = max((c.avg_tps for c in all_comparisons), default=1)
-    throughput_score = (comp.avg_tps / max_tps) * 100 if max_tps > 0 else 0
+    # Throughput score (0-100) based on comparable-context uplift
+    # Baseline gets 50 (neutral), positive uplift increases, negative decreases
+    uplift = rec.avg_throughput_uptick
+    if uplift is not None:
+        # Scale: +50% uplift = 100, 0% = 50, -50% = 0
+        throughput_score = 50 + (uplift / 50) * 50
+        throughput_score = max(0, min(100, throughput_score))
+    else:
+        # Fallback to raw TPS ratio if no uplift available
+        if all_comparisons is None:
+            all_comparisons = [comp]
+        max_tps = max((c.avg_tps for c in all_comparisons), default=1)
+        throughput_score = (comp.avg_tps / max_tps) * 100 if max_tps > 0 else 0
 
     # Stability score (0-100)
     # Lower CV = better
