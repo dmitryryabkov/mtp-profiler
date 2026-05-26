@@ -1,13 +1,4 @@
 ---
-name: Results sharing
-about: Benchmark / Results Sharing Template
-title: ''
-labels: ''
-assignees: ''
-
----
-
----
 name: Benchmark / Results Sharing
 about: Share profiling results from your hardware and workloads
 title: "[RESULTS] "
