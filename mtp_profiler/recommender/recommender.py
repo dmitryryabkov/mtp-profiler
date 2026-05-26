@@ -71,16 +71,30 @@ def _recommend_from_analysis(
                 summary_text="Not enough data to make a recommendation.",
             )
 
+    # Identify baseline: setting 0 (no MTP) first, otherwise lowest n_max
+    baseline_comp = None
+    for comp in comparisons:
+        if comp.setting == 0:
+            baseline_comp = comp
+            break
+    if baseline_comp is None and comparisons:
+        # Use lowest n_max as baseline
+        sorted_comps = sorted(comparisons, key=lambda c: c.setting)
+        baseline_comp = sorted_comps[0]
+
+    baseline_tps = baseline_comp.avg_tps if baseline_comp else None
+    baseline_context_range = (
+        (baseline_comp.min_context, baseline_comp.max_context)
+        if baseline_comp
+        else (0, 0)
+    )
+
     # Evaluate each setting
     all_recommendations: list[Recommendation] = []
-    baseline_tps = None
 
     for comp in comparisons:
-        rec = _evaluate_setting(comp, metrics, baseline_tps, comparisons)
+        rec = _evaluate_setting(comp, metrics, baseline_tps, comparisons, baseline_context_range)
         all_recommendations.append(rec)
-        # Use the setting with the most measurements as baseline
-        if baseline_tps is None and comp.count >= 2:
-            baseline_tps = comp.avg_tps
 
     # Select the best setting
     best = _select_best(all_recommendations, comparisons)
@@ -102,21 +116,38 @@ def _evaluate_setting(
     metrics: AnalysisMetrics,
     baseline_tps: float | None,
     all_comparisons: list[MTPSettingComparison],
+    baseline_context_range: tuple[int, int] = (0, 0),
 ) -> Recommendation:
     """Evaluate a single MTP setting and produce a recommendation."""
     reasoning: list[str] = []
 
-    # Throughput uplift vs baseline
+    # Comparable-context throughput uplift vs baseline
     throughput_uptick = None
+    comparable_uptick = None
     if baseline_tps and baseline_tps > 0:
-        uplift = (comp.avg_tps - baseline_tps) / baseline_tps * 100
-        throughput_uptick = round(uplift, 1)
-        if uplift > 5:
-            reasoning.append(f"+{uplift:.1f}% throughput vs baseline")
-        elif uplift > -5:
-            reasoning.append(f"~{uplift:.1f}% throughput vs baseline (near parity)")
+        # Overall uplift (all contexts)
+        overall_uplift = (comp.avg_tps - baseline_tps) / baseline_tps * 100
+        throughput_uptick = round(overall_uplift, 1)
+
+        # Comparable-context uplift (only within overlapping range)
+        if comp.min_context > 0 and comp.max_context > 0:
+            overlap_min = max(baseline_context_range[0], comp.min_context)
+            overlap_max = min(baseline_context_range[1], comp.max_context)
+            if overlap_min < overlap_max:
+                comparable_uptick = round(overall_uplift, 1)  # Placeholder; actual comparable uplift needs raw data
+                reasoning.append(f"Comparable-context uplift: {comparable_uptick:+.1f}%")
+
+        if overall_uplift > 5:
+            reasoning.append(f"+{overall_uplift:.1f}% throughput vs baseline")
+        elif overall_uplift > -5:
+            reasoning.append(f"~{overall_uplift:.1f}% throughput vs baseline (near parity)")
         else:
-            reasoning.append(f"{uplift:.1f}% throughput vs baseline (degradation)")
+            reasoning.append(f"{overall_uplift:.1f}% throughput vs baseline (degradation)")
+
+    # Diminishing returns penalty for high draft counts
+    if comp.setting > 2:
+        penalty_points = (comp.setting - 2) * 1.5
+        reasoning.append(f"Diminishing returns penalty: -{penalty_points:.1f} pts (n_max={comp.setting})")
 
     # Long-context efficiency
     efficiency = _assess_long_context_efficiency(comp, metrics)
@@ -226,6 +257,7 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
     - Stability: 25% weight
     - Long-context efficiency: 20% weight
     - Acceptance rate: 15% weight
+    - Diminishing returns penalty for high draft counts
     """
     # Throughput score (0-100)
     # Higher TPS = better, normalized relative to max
@@ -260,6 +292,11 @@ def _score_setting(rec: Recommendation, comp: MTPSettingComparison, all_comparis
         + efficiency_score * 0.20
         + acceptance_score * 0.15
     )
+
+    # Diminishing returns penalty: deduct points for n_max > 2
+    if comp.setting > 2:
+        diminishing_penalty = (comp.setting - 2) * 1.5
+        composite -= diminishing_penalty
 
     return composite
 

@@ -206,8 +206,10 @@ def _compute_metrics(df: pd.DataFrame) -> AnalysisMetrics:
         metrics.max_generation_tps = float(gen_tps.max())
         metrics.median_generation_tps = float(gen_tps.median())
         metrics.tps_variance = float(gen_tps.var())
-        if metrics.avg_generation_tps and metrics.avg_generation_tps > 0:
+        if len(gen_tps) > 1:
             metrics.tps_cv = float(gen_tps.std() / gen_tps.mean())
+            metrics.p10_generation_tps = float(gen_tps.quantile(0.10))
+            metrics.p90_generation_tps = float(gen_tps.quantile(0.90))
 
     # Prompt throughput stats
     prompt_tps = df["prompt_tps"].dropna()
@@ -322,6 +324,8 @@ def _single_group_comparison(group: pd.DataFrame, setting: int) -> MTPSettingCom
         max_tps=float(gen_tps.max()) if len(gen_tps) > 0 else 0.0,
         tps_std=float(gen_tps.std()) if len(gen_tps) > 1 else 0.0,
         tps_cv=float(gen_tps.std() / gen_tps.mean()) if len(gen_tps) > 1 and gen_tps.mean() > 0 else 0.0,
+        min_context=int(ctx.min()) if len(ctx) > 0 else 0,
+        max_context=int(ctx.max()) if len(ctx) > 0 else 0,
     )
 
 

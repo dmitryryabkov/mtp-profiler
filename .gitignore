@@ -38,3 +38,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Reference implementation (not part of the project)
+mtp_profiler_cdx/

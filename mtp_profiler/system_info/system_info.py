@@ -29,6 +29,8 @@ class SystemInfo:
     cpu_threads: int = 0
     cpu_total_threads: int = 0
     is_apple_silicon: bool = False
+    memory_pressure: str = ""  # "low", "medium", "high"
+    swap_used_mb: int = 0
 
 
 def collect_system_info() -> SystemInfo:
@@ -52,6 +54,7 @@ def collect_system_info() -> SystemInfo:
         info.macos_version = _get_macos_version()
         info.cpu_threads = _get_cpu_threads()
         info.cpu_total_threads = _get_total_threads()
+        info.memory_pressure, info.swap_used_mb = _get_memory_pressure()
     else:
         # Non-Apple Silicon: collect what we can
         info.macos_version = _get_macos_version()
@@ -161,3 +164,60 @@ def _get_total_threads() -> int:
         return int(_run_cmd(["sysctl", "-n", "hw.ncpu"]) or "0")
     except (ValueError, TypeError):
         return 0
+
+
+def _get_memory_pressure() -> tuple[str, int]:
+    """Get memory pressure and swap usage via vm_stat and sysctl.
+
+    Returns:
+        (pressure_level, swap_used_mb)
+    """
+    try:
+        vm_output = _run_cmd(["vm_stat"])
+        swap_output = _run_cmd(["sysctl", "-n", "vm.swapusage"])
+
+        if not vm_output or not swap_output:
+            return ("", 0)
+
+        # Parse vm_stat: pages are 4096 bytes
+        page_size = 4096
+        free_pages = 0
+        inactive_pages = 0
+
+        for line in vm_output.split("\n"):
+            line = line.strip()
+            if "Pages free" in line:
+                import re
+                match = re.search(r"(\d+)", line)
+                if match:
+                    free_pages = int(match.group(1))
+            elif "Pages inactive" in line:
+                import re
+                match = re.search(r"(\d+)", line)
+                if match:
+                    inactive_pages = int(match.group(1))
+
+        # Parse swap usage: "vm.swapusage: total = 1024.00M, used = 128.00M, max = 2048.00M"
+        import re
+        swap_match = re.search(r"used\s*=\s*([\d.]+)M", swap_output)
+        swap_used_mb = int(float(swap_match.group(1))) if swap_match else 0
+
+        # Compute available memory (free + inactive)
+        available_mb = (free_pages + inactive_pages) * page_size / (1024 * 1024)
+        total_mb = _get_unified_memory_mb() if _is_apple_silicon() else 16384
+
+        # Determine pressure level
+        if total_mb > 0:
+            usage_ratio = (total_mb - available_mb) / total_mb
+            if usage_ratio < 0.5:
+                pressure = "low"
+            elif usage_ratio < 0.75:
+                pressure = "medium"
+            else:
+                pressure = "high"
+        else:
+            pressure = "unknown"
+
+        return (pressure, swap_used_mb)
+    except Exception:
+        return ("", 0)

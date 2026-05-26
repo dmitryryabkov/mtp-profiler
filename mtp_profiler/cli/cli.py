@@ -251,6 +251,14 @@ def cmd_plot(
         "", "--run-id", "-r",
         help="Specific run ID to plot (default: first run)",
     ),
+    lowess: bool = typer.Option(
+        False, "--lowess",
+        help="Use LOWESS smoothing instead of rolling average",
+    ),
+    lowess_frac: float = typer.Option(
+        0.33, "--lowess-frac",
+        help="Fraction of data to use for LOWESS smoothing (default: 0.33)",
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v",
         help="Enable verbose logging",
@@ -288,7 +296,7 @@ def cmd_plot(
         profile = ProfileOutput.model_validate(json.load(f))
 
     run_id_param = run_id if run_id else None
-    config = PlotConfig()
+    config = PlotConfig(use_lowess=lowess, frac_lowess=lowess_frac)
     chart_paths = plot(profile, analysis, output_dir, config, run_id_param)
 
     if chart_paths:

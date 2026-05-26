@@ -143,6 +143,33 @@ def _smooth_rolling(series: pd.Series, window: int) -> pd.Series:
     return series.rolling(window=max(window, 1), min_periods=1, center=True).mean()
 
 
+def _smooth_lowess(series: pd.Series, frac: float) -> pd.Series:
+    """Apply LOWESS smoothing.
+
+    Args:
+        series: Input series (assumed sorted by index).
+        frac: Fraction of data to use for each local regression.
+
+    Returns:
+        Smoothed values as numpy array.
+    """
+    try:
+        from statsmodels.nonparametric.smoothing_lowess import lowess
+        clean = series.dropna().sort_index()
+        if len(clean) < 3:
+            return series
+        smoothed = lowess(clean.values, clean.index, frac=frac, return_sorted=False)
+        result = pd.Series(np.full(len(series), np.nan), index=series.index)
+        result[clean.index] = smoothed
+        return result
+    except ImportError:
+        logger.warning("statsmodels not installed, falling back to rolling average")
+        return _smooth_rolling(series, 5)
+    except Exception:
+        logger.warning("LOWESS smoothing failed, falling back to rolling average")
+        return _smooth_rolling(series, 5)
+
+
 def _plot_throughput_and_acceptance(
     profile: ProfileOutput,
     run_id: str,
@@ -202,9 +229,14 @@ def _plot_throughput_and_acceptance(
         # Rolling average smooth
         if len(x) >= 3:
             sorted_idx = np.argsort(x)
-            smooth_y = _smooth_rolling(
-                pd.Series(y)[sorted_idx], config.smoothing_window
-            ).values
+            if config.use_lowess:
+                smooth_y = _smooth_lowess(
+                    pd.Series(y, index=sorted_idx), config.frac_lowess
+                ).values
+            else:
+                smooth_y = _smooth_rolling(
+                    pd.Series(y)[sorted_idx], config.smoothing_window
+                ).values
             ax1.plot(x[sorted_idx], smooth_y, color=color,
                      linewidth=2, alpha=0.8, zorder=4)
 
@@ -213,18 +245,12 @@ def _plot_throughput_and_acceptance(
             try:
                 coeffs = np.polyfit(x, y, 1)
                 trendline = np.poly1d(coeffs)
+                slope_per_1000 = coeffs[0] * 1000
                 ax1.plot(x, trendline(x), color=color, linestyle="--",
                          linewidth=1.5, alpha=0.7, zorder=5,
-                         label=f"{label} trend: {coeffs[0]:+.3f}")
+                         label=f"{label} trend: {slope_per_1000:+.2f} t/s per 1k tokens")
             except (np.linalg.LinAlgError, ValueError):
                 pass
-
-    if has_any_data and config.show_baseline:
-        valid_all = df[df["gen_tps"].notna() & df["n_tokens"].notna()]
-        avg_tps = valid_all["gen_tps"].mean()
-        ax1.axhline(y=avg_tps, color="gray", linestyle="--",
-                    linewidth=1, alpha=0.6,
-                    label=f"Overall avg: {avg_tps:.1f} t/s", zorder=2)
 
     ax1.set_xlabel("Context Length (tokens)", fontsize=11)
     ax1.set_ylabel("Generation Throughput (tokens/sec)", fontsize=11)
@@ -253,9 +279,14 @@ def _plot_throughput_and_acceptance(
         # Rolling average smooth
         if len(x) >= 3:
             sorted_idx = np.argsort(x)
-            smooth_y = _smooth_rolling(
-                pd.Series(y)[sorted_idx], config.smoothing_window
-            ).values
+            if config.use_lowess:
+                smooth_y = _smooth_lowess(
+                    pd.Series(y, index=sorted_idx), config.frac_lowess
+                ).values
+            else:
+                smooth_y = _smooth_rolling(
+                    pd.Series(y)[sorted_idx], config.smoothing_window
+                ).values
             ax2.plot(x[sorted_idx], smooth_y, color=color,
                      linewidth=2, alpha=0.8, zorder=4)
 

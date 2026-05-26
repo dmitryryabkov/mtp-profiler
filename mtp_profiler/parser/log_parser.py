@@ -106,9 +106,12 @@ _DRAFT_ACCEPTANCE_RE = re.compile(
 )
 
 # MTP statistics line
-# e.g. "draft-mtp: #calls(b,g,a) =    1    587    447, #gen drafts =    447, #acc drafts =   415, #gen tokens =    785, #acc tokens =   705"
+# e.g. "draft-mtp: #calls(b,g,a) =    1    157    130, #gen drafts =    130, #acc drafts =   120, #gen tokens =    130, #acc tokens =   120, dur(b,g,a) = 0.001, 2758.959, 0.185 ms"
 _STATS_MTP_RE = re.compile(
-    r"draft-mtp:\s*#gen tokens\s*=\s*(\d+),\s*#acc tokens\s*=\s*(\d+)"
+    r"draft-mtp:\s*#calls\(b,g,a\)\s*=\s*(\d+)\s+(\d+)\s+(\d+),\s*"
+    r"#gen drafts\s*=\s*(\d+),\s*#acc drafts\s*=\s*(\d+),\s*"
+    r"#gen tokens\s*=\s*(\d+),\s*#acc tokens\s*=\s*(\d+),\s*"
+    r"dur\(b,g,a\)\s*=\s*([0-9.]+),\s*([0-9.]+),\s*([0-9.]+)\s+ms"
 )
 
 # Context checkpoint (only n_tokens)
@@ -364,8 +367,26 @@ class LlamaCppLogParser:
         # MTP statistics
         stats_match = _STATS_MTP_RE.search(line)
         if stats_match:
-            gen_tokens = int(stats_match.group(1))
-            acc_tokens = int(stats_match.group(2))
+            calls = int(stats_match.group(1))
+            gen_drafts_calls = int(stats_match.group(2))
+            acc_drafts_calls = int(stats_match.group(3))
+            gen_drafts = int(stats_match.group(4))
+            acc_drafts = int(stats_match.group(5))
+            gen_tokens = int(stats_match.group(6))
+            acc_tokens = int(stats_match.group(7))
+            dur_batch = float(stats_match.group(8))
+            dur_gen = float(stats_match.group(9))
+            dur_acc = float(stats_match.group(10))
+
+            m.mtp_calls = calls
+            m.mtp_gen_drafts = gen_drafts
+            m.mtp_acc_drafts = acc_drafts
+            m.mtp_gen_tokens = gen_tokens
+            m.mtp_acc_tokens = acc_tokens
+            m.mtp_dur_batch = dur_batch
+            m.mtp_dur_gen = dur_gen
+            m.mtp_dur_acc = dur_acc
+
             if m.n_drafts_generated is None:
                 m.n_drafts_generated = gen_tokens
             if m.n_drafts_accepted is None:

@@ -35,6 +35,9 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
+lowess = [
+    "statsmodels>=0.14.0",
+]
 
 [project.scripts]
 mtp-profiler = "mtp_profiler.cli:main"

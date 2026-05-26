@@ -51,6 +51,16 @@ class Measurement(BaseModel):
     # MTP / speculative decoding
     draft_acceptance_rate: Optional[float] = None
 
+    # MTP internal stats (from statistics draft-mtp line)
+    mtp_calls: Optional[int] = None
+    mtp_gen_drafts: Optional[int] = None
+    mtp_acc_drafts: Optional[int] = None
+    mtp_gen_tokens: Optional[int] = None
+    mtp_acc_tokens: Optional[int] = None
+    mtp_dur_batch: Optional[float] = None
+    mtp_dur_gen: Optional[float] = None
+    mtp_dur_acc: Optional[float] = None
+
 
 class Run(BaseModel):
     """A complete profiling run with metadata and measurements."""
@@ -77,6 +87,8 @@ class AnalysisMetrics(BaseModel):
     min_generation_tps: Optional[float] = None
     max_generation_tps: Optional[float] = None
     median_generation_tps: Optional[float] = None
+    p10_generation_tps: Optional[float] = None
+    p90_generation_tps: Optional[float] = None
 
     avg_prompt_tps: Optional[float] = None
     std_prompt_tps: Optional[float] = None
@@ -114,6 +126,9 @@ class MTPSettingComparison(BaseModel):
     tps_std: float
     tps_cv: float
     degradation_rate: Optional[float] = None
+    # Context range for comparable-context uplift calculation
+    min_context: int = 0
+    max_context: int = 0
 
 
 class AnalysisOutput(BaseModel):
@@ -153,6 +168,8 @@ class PlotConfig(BaseModel):
     smoothing_window: int = 5
     show_trendline: bool = True
     show_baseline: bool = True
+    use_lowess: bool = False
+    frac_lowess: float = 0.33
     output_format: str = "png"  # png, svg, pdf
     dpi: int = 150
     figure_width: int = 12
