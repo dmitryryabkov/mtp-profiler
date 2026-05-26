@@ -23,10 +23,7 @@ llama-server \
   --model /path/to/your/model.gguf \
   --mtp-n-max 2 \
   --mtp-n-min 0 \
-  --mtp-p-min 0.70 \
-  --threads 8 \
-  --host 0.0.0.0 \
-  --port 8080
+  --mtp-p-min 0.70
 ```
 
 ## How to collect logs
@@ -65,7 +62,7 @@ mtp-profiler profile llama.log -d output/
 
 ## About this project
 
-This repository and its code were generated entirely by AI agents. The charts, analysis, and recommendations shown in this README were produced from logs collected while the AI agent was actively implementing this very codebase — making it a self-referential profiling exercise. The real-world test data comes from `Qwen3.6-35B-A3B-UD-Q4_K_XL` on an Apple M3 Pro (28753 MB RAM, 8/11 threads).
+This repository and its code were generated entirely by AI agents. The charts, analysis, and recommendations shown in this README were produced from logs collected while the AI agent was actively implementing this very codebase — making it a self-referential profiling exercise. The real-world test data comes from `Qwen3.6-35B-A3B-UD-Q4_K_XL` on an Apple M3 Pro (36 GB RAM). All code and results were human-reviewed and verified by the repo owner.
 
 ## Features
 
@@ -145,7 +142,7 @@ output/
 
 ### Example Charts
 
-Below are example outputs from profiling `Qwen3.6-35B-A3B-UD-Q4_K_XL` on Apple M3 Pro (28753 MB, 8/11 threads).
+Below are example outputs from profiling `Qwen3.6-35B-A3B-UD-Q4_K_XL` on Apple M3 Pro (28 GB).
 
 #### Throughput & Acceptance Rate
 
